@@ -1,0 +1,116 @@
+# EA‑VRP‑QUBO – Quantum Routing with Passenger Grouping
+
+**EA‑VRP‑QUBO** é uma prova de conceito em Python que modela o *Electric Autonomous Vehicle Routing Problem* (EA‑VRP) como um problema QUBO, agrupa passageiros geograficamente para reduzir o número de qubits e resolve a instância usando **QAOA** (simulação local) ou *quantum annealing* em hardware D‑Wave, quando disponível. O fluxo completo é:
+
+> **geração de dados → agrupamento → atribuição → grafo → QUBO → otimização**
+
+---
+
+## Principais recursos
+
+| Módulo          | Destaques                                                                              |
+| --------------- | -------------------------------------------------------------------------------------- |
+| `geografics.py` | geração de coordenadas aleatórias e métricas de distância (Euclidiana, Haversine etc.) |
+| `grouper.py`    | algoritmo guloso que cria grupos de até 5 passageiros respeitando raio *ε*             |
+| `quantum.py`    | constrói o QUBO; cada variável segue o padrão `V<i>G<j>` (*veículo* → *grupo*)         |
+| `optimizer.py`  | resolve o QUBO via **QAOA** em PennyLane e oferece opção de *annealing* com Ocean SDK  |
+| `graph.py`      | desenha o grafo de passageiros, grupos e pontos de recarga para inspeção visual        |
+
+---
+
+## Dependências
+
+```bash
+pip install pennylane dimod matplotlib            # + dwave-ocean-sdk (opcional)
+```
+
+
+
+Além disso, o exemplo em `utils.py` utiliza `scikit‑learn` apenas para testes locais.
+
+### Ambiente Docker
+
+Um `docker-compose.yml` simples já inclui todas as dependências no contêiner:
+
+```bash
+docker compose up --build               # executa REPL interativo dentro do contêiner
+```
+
+---
+
+## Como rodar
+
+### Via Python nativo
+
+```bash
+python main.py            # gera dados, plota grafo, resolve via QAOA e salva figuras em /figs
+```
+
+`main.py` mostra como parametrizar quantidade de passageiros, veículos, pontos de recarga e
+profundidade *p* do QAOA.
+
+### Ajustando o QAOA
+
+No otimizador, `p`, `steps`, `lr` e `shots` controlam profundidade, iterações do Adam, taxa de
+aprendizado e número de amostras, respectivamente.
+
+Para experimentar *annealing*:
+
+```python
+from optimizer import QuantumRouteOptimizer
+opt = QuantumRouteOptimizer(qubo, var_order)
+energy = opt.solve_annealing()   # requer Ocean SDK + credenciais Leap
+```
+
+---
+
+## Estrutura do projeto
+
+```
+.
+├── geografics.py     # utilidades geográficas
+├── utils.py          # entidades Passenger, Vehicle, RechargePoint
+├── grouper.py        # agrupamento e atribuição veículo→grupo
+├── quantum.py        # geração da matriz/dicionário QUBO
+├── optimizer.py      # QAOA & annealing
+├── graph.py          # visualização com NetworkX / Matplotlib
+├── main.py           # pipeline completo de demonstração
+├── Dockerfile & docker-compose.yml
+└── LICENSE
+```
+
+---
+
+## Contribuindo
+
+1. Crie um *fork* e branch (`feature/<nome‑da‑feature>`).
+2. Garanta que `pytest` (ainda não incluído) passe antes do *pull request*.
+3. Descreva claramente a motivação da mudança.
+
+Sinta‑se à vontade para abrir *issues* com sugestões de novas métricas, heurísticas de agrupamento
+ou extensões de restrições energéticas.
+
+---
+
+## Citação
+```bibtex
+@software{ea_vrp_qubo_2025,
+  author       = {Caboclo Caface},
+  title        = {{EA‑VRP‑QUBO}: Quantum Routing with Passenger Grouping},
+  year         = {2025},
+  publisher    = {GitHub},
+  url          = {https://github.com/<seu-usuario>/EA-VRP-QUBO},
+  version      = {1.0},
+  note         = {Accessed: 2025-07-28}
+}
+```
+
+---
+
+## Licença
+
+Distribuído sob os termos do arquivo **LICENSE** presente no repositório. Consulte‑o para detalhes.
+
+---
+
+> **Citação**: se utilizar este código em pesquisas acadêmicas, cite este repositório e mencione que o QUBO para EA‑VRP com agrupamento geográfico foi resolvido via QAOA conforme implementado aqui.
