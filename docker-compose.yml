@@ -1,0 +1,8 @@
+services:
+  python:
+    build: .
+    container_name: python-container
+    stdin_open: true     
+    tty: true            
+    volumes:
+        - .:/app
