@@ -52,7 +52,7 @@ services:
 
 ```bash
 # 1. clone o projeto
-git clone https://github.com/<user>/ea-vrp-q.git
+git clone https://github.com/mephessivolc/EA-VRP.git
 cd ea-vrp-q
 
 # 2. construa a imagem (leva ~1-2 min)
@@ -167,11 +167,11 @@ Projeto sob **MIT License** – use, modifique e contribua!
 *Se usar este código em artigos ou projetos acadêmicos, cite:*
 ```bibtex
 @software{ea_vrp_qubo_2025,
-  author       = {Caboclo Caface},
+  author       = {Caface, Clovis and Yokoingawa, Raphael},
   title        = {{EA‑VRP‑QUBO}: Quantum Routing with Passenger Grouping},
   year         = {2025},
   publisher    = {GitHub},
-  url          = {https://https://github.com/mephessivolc/EA-VRP},
+  url          = {https://github.com/mephessivolc/EA-VRP},
   version      = {1.0},
   note         = {Accessed: 2025-07-28}
 }
