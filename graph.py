@@ -1,124 +1,120 @@
-import networkx as nx
+"""graph_builder.py
+====================
+Cria e salva um grafo EA-VRP usando **NetworkX**.
+
+Elementos representados
+----------------------
+* **Origem passageiro**   – rótulo ``O{id}``  cor *lightblue*
+* **Destino passageiro**  – rótulo ``D{id}``  cor *lightgreen*
+* **Origem do grupo**     – rótulo ``GO{id}`` cor *blue*
+* **Destino do grupo**    – rótulo ``GD{id}`` cor *green*
+* **Ponto de recarga**    – rótulo ``R{id}``  cor *red*
+
+Arestas
+~~~~~~~
+Cada par origem→destino recebe uma aresta com rótulo igual à distância
+Euclidiana (ou Haversine, se preferir) obtida em
+``geografics.Distances``.
+
+Função principal
+~~~~~~~~~~~~~~~~
+``build_eavrp_graph(passengers, groups, stations, out_png, metric='euclidean')``
+
+* **passengers** – lista de ``Passenger``
+* **groups** – lista de ``EAVRPGroup``
+* **stations** – lista de tuplas ``(lat, lon)`` **ou** objetos com atributo
+  coordenada (``coord``, ``location``, ``pos`` ou similar)
+* **out_png** – caminho do arquivo de saída
+* **metric** – 'euclidean' ou outro método de ``Distances``
+"""
+
+from __future__ import annotations
+
+from typing import List, Tuple, Union
+
 import matplotlib.pyplot as plt
-import random
+import networkx as nx
+
 from geografics import Distances
+from grouping import EAVRPGroup
+from utils import Passenger
 
-class GraphBuilder:
-    def __init__(self, passengers, recharge_points, grouped_passengers=None, distance_func=Distances.euclidean):
-        self.passengers = passengers
-        self.grouped_passengers = grouped_passengers
-        self.recharge_points = recharge_points
-        self.distance_func = distance_func
-        self.graph = nx.Graph()
-        self.positions = {}
+Coord = Tuple[float, float]
+Station = Union[Coord, object]
 
-    def _add_passenger_nodes(self):
-        for p in self.passengers:
-            if not p in self.grouped_passengers:
-                oid = f"PO{p.id}"
-                did = f"PD{p.id}"
-                self.graph.add_node(oid, pos=tuple(p.origin), tipo="origin")
-                self.graph.add_node(did, pos=tuple(p.destination), tipo="destination")
-                self.positions[oid] = tuple(p.origin)
-                self.positions[did] = tuple(p.destination)
-                self._add_edge_with_weight(oid, did)
 
-    def _add_grouped_passenger_nodes(self):
-        for p in self.grouped_passengers:
-            oid = f"GO{p.id}"
-            did = f"GD{p.id}"
-            self.graph.add_node(oid, pos=tuple(p.origin), tipo="group_origin")
-            self.graph.add_node(did, pos=tuple(p.destination), tipo="group_destination")
-            self.positions[oid] = tuple(p.origin)
-            self.positions[did] = tuple(p.destination)
-            self._add_edge_with_weight(oid, did)    
+# ---------------------------------------------------------------------------
+# Core builder
+# ---------------------------------------------------------------------------
 
-    def _add_recharge_nodes(self):
-        for r in self.recharge_points:
-            r_id = f"R{r.id}"
-            self.graph.add_node(r_id, pos=tuple(r.location), tipo="recharge")
-            self.positions[r_id] = tuple(r.location)
-            for other in self.graph.nodes:
-                if other != r_id:
-                    self._add_edge_with_weight(r_id, other)
+def _extract_xy(obj: Station) -> Coord:
+    """Devolve (x, y) de `obj`. Aceita tupla/lista ou objeto com atributo."""
+    if isinstance(obj, (tuple, list)):
+        return tuple(obj[:2])  # type: ignore[arg-type]
+    # tenta atributos comuns
+    for attr in ("coord", "coords", "location", "pos", "position"):
+        xy = getattr(obj, attr, None)
+        if xy is not None:
+            return tuple(xy[:2])  # type: ignore[arg-type]
+    raise TypeError("Station não possui coordenadas acessíveis")
 
-    def _add_extra_edges(self, count=5):
-        all_nodes = list(self.graph.nodes)
-        for _ in range(count):
-            n1, n2 = random.sample(all_nodes, 2)
-            if not self.graph.has_edge(n1, n2):
-                self._add_edge_with_weight(n1, n2)
 
-    def _add_edge_with_weight(self, a, b):
-        pos_a = self.positions[a]
-        pos_b = self.positions[b]
-        weight = self.distance_func(pos_a[0], pos_a[1], pos_b[0], pos_b[1])
-        self.graph.add_edge(a, b, weight=weight)
+def build_eavrp_graph(passengers: List[Passenger],
+                      groups: List[EAVRPGroup],
+                      stations: List[Station],
+                      out_png: str,
+                      metric: str = "euclidean") -> None:
+    """Gera o grafo EA-VRP e salva em *out_png* (PNG)."""
+    metric_fn = getattr(Distances, metric)
 
-    def build(self):
-        self._add_passenger_nodes()
-        self._add_grouped_passenger_nodes()
-        self._add_recharge_nodes()
-        self._add_extra_edges()
+    G = nx.Graph()
 
-    def draw(self, filename=None):
-        plt.figure(figsize=(12, 8))
-        pos = {k: tuple(map(float, v[:2])) for k, v in self.positions.items()}
-        labels = {n: n for n in self.graph.nodes}
+    # ---------------- Passenger nodes & edges ----------------------
+    for p in passengers:
+        o_node = f"O{p.id}"
+        d_node = f"D{p.id}"
+        G.add_node(o_node, pos=tuple(p.origin[:2]), color="lightblue", label=o_node)
+        G.add_node(d_node, pos=tuple(p.destination[:2]), color="lightgreen", label=d_node)
+        dist = metric_fn(*p.origin, *p.destination)
+        G.add_edge(o_node, d_node, weight=dist)
 
-        node_colors = []
-        font_colors = []
-        for n in self.graph.nodes:
-            tipo = self.graph.nodes[n].get("tipo")
-            if tipo == "group_origin":
-                node_colors.append("green")
-                font_colors.append("black")
-            elif tipo == "group_destination":
-                node_colors.append("blue")
-                font_colors.append("white")
-            elif tipo == "origin":
-                node_colors.append("lightgreen")
-                font_colors.append("black")
-            elif tipo == "destination":
-                node_colors.append("lightblue")
-                font_colors.append("black")
-            elif tipo == "recharge":
-                node_colors.append("orange")
-                font_colors.append("black")
-            else:
-                node_colors.append("lightgray")
-                font_colors.append("black")
+    # ---------------- Group centroid nodes & edges ----------------
+    for g in groups:
+        go_node = f"GO{g.id}"
+        gd_node = f"GD{g.id}"
+        G.add_node(go_node, pos=tuple(g.origin_centroid()[:2]), color="blue", label=go_node)
+        G.add_node(gd_node, pos=tuple(g.destination_centroid()[:2]), color="green", label=gd_node)
+        dist = metric_fn(*g.origin_centroid(), *g.destination_centroid())
+        G.add_edge(go_node, gd_node, weight=dist)
 
-        nx.draw(self.graph, pos, with_labels=False, node_color=node_colors, node_size=700)
-        for (node, (x, y), label, font_color) in zip(self.graph.nodes, pos.values(), labels.values(), font_colors):
-            plt.text(x, y, label, fontsize=8, ha='center', va='center', color=font_color)
+    # ---------------- Charging stations ---------------------------
+    for idx, st in enumerate(stations, start=1):
+        xy = _extract_xy(st)
+        r_node = f"R{idx}"
+        G.add_node(r_node, pos=xy, color="red", label=r_node)
 
-        edge_labels = nx.get_edge_attributes(self.graph, 'weight')
-        formatted_labels = {k: f"{v:.2f}" for k, v in edge_labels.items()}
-        try:
-            nx.draw_networkx_edge_labels(self.graph, pos, edge_labels=formatted_labels, font_size=6, rotate=False)
-        except ValueError as e:
-            print("Erro ao desenhar rótulos das arestas:", e)
+    station_nodes = [n for n in G.nodes if n.startswith("R")]
+    for r_node in station_nodes:
+        r_pos = G.nodes[r_node]["pos"]
+        for n, data in G.nodes(data=True):
+            if n.startswith("R"):
+                continue            # pula arestas R↔R
+            dist = metric_fn(*r_pos, *data["pos"])
+            G.add_edge(r_node, n, weight=dist)
+    # ---------------- Drawing -------------------------------------
+    pos = nx.get_node_attributes(G, "pos")
+    colors = [data["color"] for _, data in G.nodes(data=True)]
+    labels = nx.get_node_attributes(G, "label")
+    edge_labels = {e: f"{d['weight']:.1f}" for e, d in G.edges.items() if "weight" in d}
 
-        plt.title("Grafo de Passageiros e Grupos")
-        if filename:
-            plt.savefig(filename, dpi=300)
-            print(f"Grafo {filename} criado com sucesso!!!")
-        plt.show()
+    plt.figure(figsize=(12, 8))
+    nx.draw(G, pos, node_color=colors, with_labels=True, labels=labels,
+            node_size=500, font_size=8, arrows=True)
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=7)
+    plt.axis("off")
+    plt.tight_layout()
+    plt.savefig(out_png, dpi=150)
+    plt.close()
 
-if __name__ == "__main__":
-    from utils import Passenger, RechargePoint
-    from geografics import generate_random_geografic_points
 
-    print("--- Verificando construção do grafo ---")
-    n = 5
-    origens = generate_random_geografic_points(n)
-    destinos = generate_random_geografic_points(n)
-    passageiros = [Passenger(i, o, d) for i, (o, d) in enumerate(zip(origens, destinos))]
-
-    pontos = generate_random_geografic_points(2)
-    recargas = [RechargePoint(i, loc) for i, loc in enumerate(pontos)]
-
-    g = GraphBuilder(passengers=passageiros, recharge_points=recargas, grouped_passengers=[passageiros])
-    g.build()
-    g.draw("figs/grafo_exemplo.png")
+__all__ = ["build_eavrp_graph"]

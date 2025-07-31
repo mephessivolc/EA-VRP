@@ -1,6 +1,6 @@
 import numpy as np
 
-def generate_random_geografic_points(n_points, lat_range=(-90, 90), lon_range=(-180, 180)):
+def generate_random_geografic_points(n, xlim=(-90, 90), ylim=(-180, 180)):
     """
     Gera n_points pontos geográficos aleatórios (latitude, longitude).
     
@@ -13,9 +13,15 @@ def generate_random_geografic_points(n_points, lat_range=(-90, 90), lon_range=(-
     Retorno:
         np.ndarray: matriz (n_points, 2) com colunas [latitude, longitude]
     """
-    latitudes = np.random.uniform(low=lat_range[0], high=lat_range[1], size=n_points)
-    longitudes = np.random.uniform(low=lon_range[0], high=lon_range[1], size=n_points)
-    return np.stack((latitudes, longitudes), axis=1)
+    # latitudes = np.random.uniform(low=lat_range[0], high=lat_range[1], size=n_points)
+    # longitudes = np.random.uniform(low=lon_range[0], high=lon_range[1], size=n_points)
+    # return np.stack((latitudes, longitudes), axis=1)
+
+    rng = np.random.default_rng()
+    xs = rng.uniform(xlim[0], xlim[1], n)
+    ys = rng.uniform(ylim[0], ylim[1], n)
+    return list(zip(xs, ys))
+
 
 class Distances:
 

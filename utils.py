@@ -1,6 +1,5 @@
-from sklearn.cluster import DBSCAN
-import numpy as np
 from geografics import Distances
+from typing import List
 
 class Passenger:
     def __init__(self, id, origin, destination):
@@ -8,13 +7,23 @@ class Passenger:
         self.origin = origin
         self.destination = destination
 
+class Group:
+    def __init__(self, gid: int, passengers: List[Passenger]):
+        self.id = gid
+        self.passengers = passengers
+        self.origin = passengers[0].origin
+        self.destination = passengers[0].destination
+
+    def __iter__(self):
+        return iter(self.passengers)
+    
 class RechargePoint:
     def __init__(self, id, location):
         self.id = id
         self.location = location
 
 class Vehicle:
-    def __init__(self, id, start_location=(0, 0), battery=100.0, consumption_per_km=2.0, min_charge=20.0):
+    def __init__(self, id, start_location=(0, 0), battery=100.0, consumption_per_km=0.4, min_charge=20.0):
         self.id = id
         self.start_location = start_location
         self.battery = battery  # carga atual em %

@@ -1,68 +1,128 @@
-"""main.py – Pipeline completa
-=============================
-Geração de dados → agrupamento → atribuição → grafo → QUBO.
+"""main.py
+===========
+Pipeline de demonstração do EA‑VRP.
+
+Gera dados sintéticos (passageiros, veículos, pontos de recarga), executa o
+agrupamento geográfico e imprime no console a composição de cada grupo.
+
+Uso
+---
+$ python main.py 
+
 """
 
-from utils import Passenger, Vehicle, RechargePoint
+from __future__ import annotations
+
+import random
+from typing import List
+
 from geografics import generate_random_geografic_points
-from graph import GraphBuilder
-from grouper import PassengerGrouper, Assignment
-from quantum import QuboGenerator
-from optimizer import QuantumRouteOptimizer
+from grouping import GeoGrouper
+from utils import Passenger, Vehicle, RechargePoint
+from encoder import EA_VRP_QUBOEncoder
+from solver import QAOASolver
+from graph import build_eavrp_graph
 
-# ------------------------------- Parâmetros ------------------------------- #
+from pathlib import Path
+# ---------------------------------------------------------------------------
+# Helpers de geração sintética
+# ---------------------------------------------------------------------------
 
-n_passengers = 20
-n_vehicles = 15
-n_recharge_points = 8
-eps = 0.3
+def make_passengers(n: int, x_lim: List, y_lim: List) -> List[Passenger]:
+    """Cria *n* passageiros com origem e destino aleatórios."""
+    origin = generate_random_geografic_points(n, x_lim, y_lim)
+    dest = generate_random_geografic_points(n, x_lim, y_lim)
+    passengers: List[Passenger] = []
+    for i, (o, d) in enumerate(zip(origin,dest)):
+        passengers.append(Passenger(id=i, origin=o, destination=d))
+    return passengers
 
-lat_range = (-23.9, -23.3)
-lon_range = (-46.8, -46.4)
 
-# ------------------------------ Geração Dados ----------------------------- #
+def make_vehicles(n: int) -> List[Vehicle]:
+    """Cria *n* veículos com parâmetros padrão."""
+    return [Vehicle(id=i + 1) for i in range(n)]
 
-origins = generate_random_geografic_points(n_passengers, lat_range, lon_range)
-destinations = generate_random_geografic_points(n_passengers, lat_range, lon_range)
-recharge_coords = generate_random_geografic_points(n_recharge_points, lat_range, lon_range)
+def make_recharge_points(n: int, x_lim: List, y_lim: List) -> List[RechargePoint]:
+    origin = generate_random_geografic_points(n, x_lim, y_lim)
+    recharge_points: List[RechargePoint] = []
+    for i, o in enumerate(origin):
+        recharge_points.append(RechargePoint(id=i, location=o))
+    return recharge_points
 
-passengers = [Passenger(i, o, d) for i, (o, d) in enumerate(zip(origins, destinations))]
-vehicles = [Vehicle(i) for i in range(n_vehicles)]
-recharge_points = [RechargePoint(i, loc) for i, loc in enumerate(recharge_coords)]
+# ---------------------------------------------------------------------------
+# Execução principal
+# ---------------------------------------------------------------------------
 
-# --------------------------- Agrupamento & Atrib -------------------------- #
+def main() -> None:
+    OUTDIR = Path("figs")
+    OUTDIR.mkdir(parents=True, exist_ok=True)
+    
+    n_passengers = 10
+    n_vehicles = 3
+    n_recharge_points = 2
 
-grouper = PassengerGrouper(passengers, eps=eps)
-groups = grouper.build_groups()
-assignment = Assignment(groups, vehicles)
+    p=2
+    shots=1000
+    steps=15
 
-print("Assignment:", assignment.print_report())
+    seed = 42
+    filename_hist = OUTDIR / "teste_histograma.png" # nome do arquivo do histograma
+    filename_graph = OUTDIR / "teste_grafo.png" # nome do arquivo do grafo
 
-# ------------------------------- Construir Grafo -------------------------- #
+    passengers = make_passengers(n_passengers, (-24, -23.4), (-46.8, -46.3))
+    vehicles = make_vehicles(n_vehicles)
+    recharge_points = make_recharge_points(n_recharge_points, (-24, -23.4), (-46.8, -46.3))
 
-graph_builder = GraphBuilder(passengers=passengers,
-                             recharge_points=recharge_points,
-                             grouped_passengers=assignment.as_list())
+    grouper = GeoGrouper()
+    groups = grouper.fit(passengers)
 
-graph_builder.build()
-graph_builder.draw(f"figs/Graph_P{n_passengers}V{n_vehicles}R{n_recharge_points}.png")
+    # -----------------------------------------------------
+    # Relatório simples no console
+    # -----------------------------------------------------
+    print("==== Agrupamento de Passageiros ====")
+    for g in groups:
+        p_ids = [passenger.id for passenger in g.passengers]
+        print(f"Grupo {g.id:02d} | {len(p_ids)} passageiros -> {p_ids}")
+    print("====================================")
 
-# --------------------------- Gerar QUBO & matriz -------------------------- #
+    # Exemplo de como acessar métricas extras
+    total_qubits = len(groups)  # variável por grupo (modelo futuro)
+    print(f"\nTotal de grupos (≈ qubits na formulação): {total_qubits}")
 
-qgen = QuboGenerator(assignment, recharge_points)
-qubo = qgen.build_qubo()
-Q = qgen.export_matrix()
+    print("=== Total de Veículos ===")
+    print(f"Veículos {len(vehicles)}")
+    # 2) Construção do QUBO -------------------------------------------
+    encoder = EA_VRP_QUBOEncoder(vehicles, groups, recharge_points)
 
-print("Variáveis do QUBO:", qgen.variables)
-print("Matriz QUBO densa:\n", Q)
+    print(f"Variáveis / qubits: {encoder.num_qubits}")
+    print("Matriz QUBO (valores arredondados a 2 casas decimais):")
+    encoder.print_matrix(precision=2)
 
-print(f"Quantidade de Qubits utilizado: {len(qgen.variables)}")
+    # Exemplo: acessar o ndarray para outras análises -----------------
+    mat = encoder.to_matrix()
+    offset = encoder.offset
+    print(f"\nOffset (constante): {offset:.2f}")
 
-optimizer = QuantumRouteOptimizer(qubo, qgen.variables)
-exp_cost = optimizer.solve_qaoa(p=2, steps=5, lr=0.1, shots=1000)
+     # 3) QAOA ----------------------------------------------------------
+    solver = QAOASolver(encoder,
+                        p=p,
+                        shots=shots,
+                        steps=steps,
+                        dev="default.mixed",
+                        seed=seed)
+    best_bits, best_cost = solver.solve()
 
-print(f"Valor esperado: {exp_cost}")
-print(f"Melhor estado: {optimizer.best_bitstring}")
+    # Estado inteiro x (LSB = qubit 0)
+    x_val = int("".join(map(str, best_bits[::-1])), 2)
+    print(f"Melhor estado: |{x_val}⟩  ==> custo {best_cost:.2f}\n")
 
-filename = f"figs/histogram_P{n_passengers}V{n_vehicles}R{n_recharge_points}.png"
-optimizer.plot_histogram(filename=filename)
+    # 4) Histograma ----------------------------------------------------
+    
+    solver.save_histogram(filename_hist)
+    print(f"Histograma salvo em: {filename_hist}")
+
+    build_eavrp_graph(passengers, groups, recharge_points, filename_graph)
+    print(f"Grafo salvo em: {filename_graph}")
+
+if __name__ == "__main__":
+    main()
