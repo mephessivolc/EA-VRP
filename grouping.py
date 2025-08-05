@@ -20,56 +20,32 @@ from utils import Passenger, Group
 
 Coord = Tuple[float, float]
 
-
-# class EAVRPGroup(Group):
-#     """Representa um grupo de passageiros para EA-VRP."""
-
-#     def origin(self) -> Coord:
-#         xs = [p.origin[0] for p in self.passengers]
-#         ys = [p.origin[1] for p in self.passengers]
-#         return (sum(xs)/len(xs), sum(ys)/len(ys))
-
-#     def destination(self) -> Coord:
-#         xs = [p.destination[0] for p in self.passengers]
-#         ys = [p.destination[1] for p in self.passengers]
-#         return (sum(xs)/len(xs), sum(ys)/len(ys))
-
-#     def distance(self, metric: str="euclidian") -> float:
-#         """Soma as distâncias entre todas as pares de membros (origem+destino)."""
-#         d = 0.0
-#         metric_fn = getattr(Distances, metric)
-#         for i in range(len(self.passengers)):
-#             for j in range(i+1, len(self.passengers)):
-#                 p_i = self.passengers[i]
-#                 p_j = self.passengers[j]
-#                 d += metric_fn(*p_i.origin(), *p_j.origin())
-#                 d += metric_fn(*p_i.destination(), *p_j.destination())
-#         return d
-
 class EAVRPGroup(Group):
 
+    @property
     def origin(self) -> Coord:
         """
         Calcula o ponto (ilustrativo) de origem do grupo como o centróide
         das coordenadas de origem de todos os passageiros, usando numpy.
         """
-        coord = np.array([p.origin() for p in self.passengers])
+        coord = np.array([p.origin for p in self.passengers])
 
         centroid = coord.mean(axis=0)
         return tuple(centroid)
 
+    @property
     def destination(self) -> Coord:
         """
         Calcula o ponto (ilustrativo) de destino do grupo como o centróide
         das coordenadas de destino de todos os passageiros, usando numpy.
         """
-        coord = np.array([p.destination() for p in self.passengers])
+        coord = np.array([p.destination for p in self.passengers])
 
         centroid = coord.mean(axis=0)
         return tuple(centroid)
     
     def distance(self, 
-                 metric: str="euclidian", 
+                 metric: str="euclidean", 
                  depot: Tuple[float,float]=(0,0)
                  ):   
 
@@ -80,8 +56,8 @@ class EAVRPGroup(Group):
 
         metric_fn = getattr(Distances, metric)
         # Inicializa listas mutáveis de origens e destinos
-        origins = [p.origin() for p in self.passengers]
-        destinations = [p.destination() for p in self.passengers]
+        origins = [p.origin for p in self.passengers]
+        destinations = [p.destination for p in self.passengers]
 
         total_cost = 0.0
         # 1) Escolhe p0: origem mais próxima do depósito
@@ -131,8 +107,8 @@ class GeoGrouper:
 
         # pré-cálculo de distâncias compostas
         def pair_dist(p_i: Passenger, p_j: Passenger) -> float:
-            d_o = self.metric_fn(*p_i.origin(), *p_j.origin())
-            d_d = self.metric_fn(*p_i.destination(), *p_j.destination())
+            d_o = self.metric_fn(*p_i.origin, *p_j.origin)
+            d_d = self.metric_fn(*p_i.destination, *p_j.destination)
             return self.alpha * d_o + self.beta * d_d
         
         # função de diâmetro de cluster

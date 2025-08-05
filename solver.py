@@ -42,13 +42,11 @@ class QAOASolver:
         self.n_qubits = encoder.num_qubits
         self.trotter_steps = trotter_steps
 
+        # Dispositivo quântico
         try:
             self.dev = qml.device(dev, wires=self.n_qubits, shots=shots, seed=seed)
         except Exception as e:
             raise ValueError(f"Pennylane não conseguiu instanciar o device '{dev}': {e}")
-
-        # Dispositivo quântico
-        self.dev = qml.device(dev, wires=self.n_qubits, shots=shots, seed=seed)
 
         # Hamiltoniano de custo
         self.cost_h, self.offset = self._qubo_to_hamiltonian()

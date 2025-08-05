@@ -129,13 +129,13 @@ class EA_VRP_QUBOEncoder:
     def _compute_group_costs(self):
         metric = self.metric_fn
         depot = self.depot[0]
-        print(depot)
+
         costs: List[List[float]] = []
         for _ in self.vehicles:
             row = []
             for g in self.groups:
-                go = g.origin()
-                gd = g.destination()
+                go = g.origin
+                gd = g.destination
                 cost = metric(*depot, *go) + g.distance(metric=metric.__name__) + metric(*gd, *depot)
                 row.append(cost)
             costs.append(row)

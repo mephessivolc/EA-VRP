@@ -3,40 +3,60 @@ from typing import List
 
 class Passenger:
     def __init__(self, id, origin, destination):
-        self.id = id
+        self._id = id
         self._origin = origin
         self._destination = destination
     
-    def distance(self, metric: str="euclidian") -> float:
+    @property
+    def id(self):
+        return self._id
+    
+    def distance(self, metric: str="euclidean") -> float:
         metric_fn = getattr(Distances, metric)
         return metric_fn(*self._origin, *self._destination)
     
+    @property
     def origin(self):
         return self._origin
     
+    @property
     def destination(self):
         return self._destination
 
 class Group:
     def __init__(self, gid: int, passengers: List[Passenger]):
-        self.id = gid
+        self._id = gid
         self.passengers = passengers
-        self._origin = passengers[0].origin()
-        self._destination = passengers[0].destination()
+        self._origin = passengers[0].origin
+        self._destination = passengers[0].destination
 
     def __iter__(self):
         return iter(self.passengers)    
     
+    @property
+    def id(self):
+        return self._id
+    
+    @property
     def origin(self):
         return self._origin
     
+    @property
     def destination(self):
         return self._destination
     
 class RechargePoint:
     def __init__(self, id, location):
-        self.id = id
-        self.location = location
+        self._id = id
+        self._location = location
+    
+    @property
+    def id(self):
+        return self._id
+    
+    @property
+    def location(self):
+        return self._location
 
 class Vehicle:
     def __init__(self, id, start_location=(0, 0), battery=100.0, consumption_per_km=0.4, min_charge=20.0):
