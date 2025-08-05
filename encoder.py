@@ -17,7 +17,6 @@ import numpy as np
 from geografics import Distances
 from grouping import EAVRPGroup
 from utils import Vehicle
-from shrink import QUBOShrinker
 
 Idx = int
 QUBO = Dict[Tuple[Idx, Idx], float]
@@ -36,7 +35,6 @@ class EA_VRP_QUBOEncoder:
                  stations: List[object] | None,
                  penalty_lambda: float | None = None,
                  penalty_mu: float | None = None,
-                 shrink_epsilon: float | None = None,
                  depot: Coord | None = None,
                  metric: str = "euclidean") -> None:
         if not vehicles or not groups:
@@ -46,7 +44,6 @@ class EA_VRP_QUBOEncoder:
         self.stations = stations or []
         self.metric_fn = getattr(Distances, metric)
         self.depot = depot or (0.0, 0.0)
-        self.shrink_epsilon = QUBOShrinker(shrink_epsilon) if shrink_epsilon else None
 
         # custos
         self._cost_g = self._compute_group_costs()
@@ -131,7 +128,8 @@ class EA_VRP_QUBOEncoder:
 
     def _compute_group_costs(self):
         metric = self.metric_fn
-        depot = self.depot
+        depot = self.depot[0]
+        print(depot)
         costs: List[List[float]] = []
         for _ in self.vehicles:
             row = []
@@ -146,7 +144,7 @@ class EA_VRP_QUBOEncoder:
     def _compute_station_costs(self):
         if not self.stations:
             return []
-        metric = self.metric_fn; depot = self.depot
+        metric = self.metric_fn; depot = self.depot[0]
         costs: List[List[float]] = []
         for _ in self.vehicles:
             row = []
@@ -190,9 +188,6 @@ class EA_VRP_QUBOEncoder:
                         vi, vj = vars_r[i], vars_r[j]
                         key = (vi, vj) if vi <= vj else (vj, vi)
                         Q[key] = Q.get(key, 0.0) + 2 * mu
-
-        if self.shrink_epsilon is not None:
-            Q, offset = self.shrink_epsilon.shrink(Q, offset)
 
         return Q, offset
 
