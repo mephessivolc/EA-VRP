@@ -59,10 +59,10 @@ def _extract_xy(obj: Station) -> Coord:
     raise TypeError("Station não possui coordenadas acessíveis")
 
 
-def build_eavrp_graph(passengers: List[Passenger],
+def build_graph(passengers: List[Passenger],
                       groups: List[EAVRPGroup],
                       stations: List[Station],
-                      out_png: str,
+                      out_png: str | None,
                       metric: str = "euclidean") -> None:
     """Gera o grafo EA-VRP e salva em *out_png* (PNG)."""
     metric_fn = getattr(Distances, metric)
@@ -73,18 +73,18 @@ def build_eavrp_graph(passengers: List[Passenger],
     for p in passengers:
         o_node = f"O{p.id}"
         d_node = f"D{p.id}"
-        G.add_node(o_node, pos=tuple(p.origin[:2]), color="lightblue", label=o_node)
-        G.add_node(d_node, pos=tuple(p.destination[:2]), color="lightgreen", label=d_node)
-        dist = metric_fn(*p.origin, *p.destination)
+        G.add_node(o_node, pos=tuple(p.origin()[:2]), color="lightblue", label=o_node)
+        G.add_node(d_node, pos=tuple(p.destination()[:2]), color="lightgreen", label=d_node)
+        dist = metric_fn(*p.origin(), *p.destination())
         G.add_edge(o_node, d_node, weight=dist)
 
     # ---------------- Group centroid nodes & edges ----------------
     for g in groups:
         go_node = f"GO{g.id}"
         gd_node = f"GD{g.id}"
-        G.add_node(go_node, pos=tuple(g.origin_centroid()[:2]), color="blue", label=go_node)
-        G.add_node(gd_node, pos=tuple(g.destination_centroid()[:2]), color="green", label=gd_node)
-        dist = metric_fn(*g.origin_centroid(), *g.destination_centroid())
+        G.add_node(go_node, pos=tuple(g.origin()[:2]), color="blue", label=go_node)
+        G.add_node(gd_node, pos=tuple(g.destination()[:2]), color="green", label=gd_node)
+        dist = metric_fn(*g.origin(), *g.destination())
         G.add_edge(go_node, gd_node, weight=dist)
 
     # ---------------- Charging stations ---------------------------
@@ -113,8 +113,10 @@ def build_eavrp_graph(passengers: List[Passenger],
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=7)
     plt.axis("off")
     plt.tight_layout()
-    plt.savefig(out_png, dpi=150)
+    if out_png:
+        plt.savefig(out_png, dpi=150)
+    plt.show()
     plt.close()
 
 
-__all__ = ["build_eavrp_graph"]
+__all__ = ["build_graph"]

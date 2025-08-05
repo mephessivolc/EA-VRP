@@ -1,10 +1,14 @@
 services:
   python:
     build: .
+    image: python
     container_name: python-container
     stdin_open: true     
     tty: true            
+    ports:
+      - "4000:4000"
     volumes:
-        - .:/app
+      - .:/home/jovyan/work
     environment:
       - PYTHONUNBUFFERED=1
+      - JUPYTER_ENABLE_LAB=yes

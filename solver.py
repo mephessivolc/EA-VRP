@@ -146,7 +146,7 @@ class QAOASolver:
     # ---------------------------------------------------------------
     # Histograma
     # ---------------------------------------------------------------
-    def save_histogram(self, filename: str):
+    def plot_histogram(self, filename: str | None):
         """Plota histograma de todos os estados com **10 rótulos**.
 
         A barra correspondente ao melhor estado é destacada em vermelho.
@@ -175,7 +175,9 @@ class QAOASolver:
         plt.ylabel("Frequência")
         plt.title("Histograma QAOA")
         plt.tight_layout()
-        plt.savefig(filename, dpi=300)
+        if filename:
+            plt.savefig(filename, dpi=300)
+        plt.show()
         plt.close()
 
     # ---------------------------------------------------------------

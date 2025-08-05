@@ -1,9 +1,5 @@
 # EA-VRP-Q (Electric-Autonomous Vehicle Routing with Quantum Optimization)
 
-<p align="center">
-<img src="assets/architecture.svg" width="650">
-</p>
-
 **EA-VRP-Q** é um protótipo de *pipeline* completo que combina heurísticas
 clássicas de agrupamento de passageiros, formulação **QUBO** e
 resolução via **QAOA** (Quantum Approximate Optimization Algorithm) para

@@ -1,187 +1,187 @@
 """grouping.py
 ================
-Módulo responsável por formar grupos geográficos de 1‑5 passageiros a partir
-de uma lista de instâncias ``Passenger`` e retornar objetos ``EAVRPGroup`` com
-métricas úteis para o restante do pipeline EA‑VRP.
+Heurística gulosa de agrupamento geográfico com restrição de capacidade
+(1 a max_size passageiros) e diâmetro máximo δ.
 
-Observação importante
---------------------
-As funções em ``geografics.Distances`` (``euclidean``, ``haversine``, etc.)
-recebem **quatro valores escalares** – ``x1, y1, x2, y2``. Portanto, sempre que
-invocamos um método da classe ``Distances`` devemos *desempacotar* as
-coordenadas (lat, lon) dos passageiros.
-
-Principais componentes
-----------------------
-* ``EAVRPGroup`` – extensão de ``Group`` que oferece centróides e distância
-  interna ótima.
-* ``GeoGrouper``  – algoritmo Greedy Capacity‑Constrained Clustering (G‑CCC).
+Classes
+-------
+- GeoGrouper: implementa o método fit(passengers) retornando lista de EAVRPGroup.
+- EAVRPGroup: agrupa passageiros e oferece centróide e distância interna.
 """
 
 from __future__ import annotations
 
-import itertools
+from typing import List, Tuple
 import math
-from typing import List, Sequence, Tuple
+import numpy as np
 
-from utils import Passenger, Group  # classes fornecidas pelo usuário
 from geografics import Distances
+from utils import Passenger, Group
 
 Coord = Tuple[float, float]
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
-def _centroid(points: Sequence[Coord]) -> Coord:
-    """Retorna o centróide (lat, lon) de um conjunto de coordenadas."""
-    lat = sum(p[0] for p in points) / len(points)
-    lon = sum(p[1] for p in points) / len(points)
-    return (lat, lon)
+# class EAVRPGroup(Group):
+#     """Representa um grupo de passageiros para EA-VRP."""
 
+#     def origin(self) -> Coord:
+#         xs = [p.origin[0] for p in self.passengers]
+#         ys = [p.origin[1] for p in self.passengers]
+#         return (sum(xs)/len(xs), sum(ys)/len(ys))
 
-def _avg_intercluster_distance(cluster_a: Sequence[int], cluster_b: Sequence[int],
-                               dist_matrix: List[List[float]]) -> float:
-    """Média das distâncias *pré‑computadas* entre dois clusters (índices)."""
-    total = 0.0
-    for i in cluster_a:
-        for j in cluster_b:
-            total += dist_matrix[i][j]
-    return total / (len(cluster_a) * len(cluster_b))
+#     def destination(self) -> Coord:
+#         xs = [p.destination[0] for p in self.passengers]
+#         ys = [p.destination[1] for p in self.passengers]
+#         return (sum(xs)/len(xs), sum(ys)/len(ys))
 
-
-# ---------------------------------------------------------------------------
-# Extensão de Group
-# ---------------------------------------------------------------------------
+#     def distance(self, metric: str="euclidian") -> float:
+#         """Soma as distâncias entre todas as pares de membros (origem+destino)."""
+#         d = 0.0
+#         metric_fn = getattr(Distances, metric)
+#         for i in range(len(self.passengers)):
+#             for j in range(i+1, len(self.passengers)):
+#                 p_i = self.passengers[i]
+#                 p_j = self.passengers[j]
+#                 d += metric_fn(*p_i.origin(), *p_j.origin())
+#                 d += metric_fn(*p_i.destination(), *p_j.destination())
+#         return d
 
 class EAVRPGroup(Group):
-    """Grupo de passageiros com utilidades extras (centróide & rota interna)."""
 
-    # ---------------------------------------------------------------------
-    # Centróides
-    # ---------------------------------------------------------------------
-    def origin_centroid(self) -> Coord:
-        return _centroid([p.origin for p in self.passengers])
+    def origin(self) -> Coord:
+        """
+        Calcula o ponto (ilustrativo) de origem do grupo como o centróide
+        das coordenadas de origem de todos os passageiros, usando numpy.
+        """
+        coord = np.array([p.origin() for p in self.passengers])
 
-    def destination_centroid(self) -> Coord:
-        return _centroid([p.destination for p in self.passengers])
+        centroid = coord.mean(axis=0)
+        return tuple(centroid)
 
-    # ---------------------------------------------------------------------
-    # Distância interna ótima (TSP exaustivo, k ≤ 5)
-    # ---------------------------------------------------------------------
-    def internal_distance(self, metric: str = "euclidean") -> float:
+    def destination(self) -> Coord:
+        """
+        Calcula o ponto (ilustrativo) de destino do grupo como o centróide
+        das coordenadas de destino de todos os passageiros, usando numpy.
+        """
+        coord = np.array([p.destination() for p in self.passengers])
+
+        centroid = coord.mean(axis=0)
+        return tuple(centroid)
+    
+    def distance(self, 
+                 metric: str="euclidian", 
+                 depot: Tuple[float,float]=(0,0)
+                 ):   
+
+        """
+        Calcula o custo interno ao grupo (pickups + drop-offs), sem incluir
+        os trechos depot->p0 e pk->depot, usando heurística gulosa.
+        """
+
         metric_fn = getattr(Distances, metric)
-        start = self.origin_centroid()
-        dests = [p.destination for p in self.passengers]
-        best = math.inf
+        # Inicializa listas mutáveis de origens e destinos
+        origins = [p.origin() for p in self.passengers]
+        destinations = [p.destination() for p in self.passengers]
 
-        for perm in itertools.permutations(dests):
-            length = 0.0
-            pos = start
-            for d in perm:
-                # Distances.<metric>(x1, y1, x2, y2)
-                length += metric_fn(*pos, *d)
-                pos = d
-            best = min(best, length)
-        return best
+        total_cost = 0.0
+        # 1) Escolhe p0: origem mais próxima do depósito
+        current_point = min(origins, key=lambda o: metric_fn(*depot, *o))
+        origins.remove(current_point)
 
-    # Representação amigável para debug
-    def __repr__(self) -> str:  # noqa: D401
-        ids = [p.id for p in self.passengers]
-        return f"<Group {self.id} – passengers {ids}>"
+        # 2) Pick-up interno: visita todos os origins restantes
+        while origins:
+            next_origin = min(origins, key=lambda o:metric_fn(*current_point, *o))
+            total_cost += metric_fn(*current_point, *next_origin)
+            current_point = next_origin
+            origins.remove(next_origin)
 
+        # 3) Drop-off interno: a partir do último pickup, visita todos os destinations
+        while destinations:
+            next_dest = min(destinations, key=lambda d: metric_fn(*current_point, *d))
+            total_cost += metric_fn(*current_point, *next_dest)
+            current_point = next_dest
+            destinations.remove(next_dest)
 
-# ---------------------------------------------------------------------------
-# Algoritmo de agrupamento
-# ---------------------------------------------------------------------------
+        # 4) Retorna o custo total dos trechos internos
+        return total_cost 
 
 class GeoGrouper:
-    """Agrupa passageiros em clusters de até 5 usando G‑CCC.
+    """Agrupa passageiros com heurística gulosa e restrições de capacidade e diâmetro."""
 
-    Parameters
-    ----------
-    max_size : int, default=5
-        Capacidade máxima de passageiros por grupo.
-    alpha, beta : float, default=0.5
-        Pesos da distância de origem e destino, respectivamente.
-    penalty : float, default=10_000.0
-        Penalidade aplicada a grupos incompletos
-    metric : str, default="euclidean"
-        Nome do método da classe ``Distances`` a empregar.
-    """
-
-    def __init__(self,
-                 max_size: int = 5,
-                 alpha: float = 0.5,
-                 beta: float = 0.5,
-                 penalty: float = 10_000.0,
-                 metric: str = "euclidean") -> None:
-        if not 1 <= max_size <= 5:
-            raise ValueError("max_size precisa estar entre 1 e 5")
+    def __init__(
+        self,
+        max_size: int = 5,
+        alpha: float = 0.5,
+        beta: float = 0.5,
+        penalty: float = 10.0,
+        delta: float = 1, # distância máxima por grupo, 1 => 100km
+        metric: str = "euclidean",
+    ) -> None:
         self.max_size = max_size
         self.alpha = alpha
         self.beta = beta
         self.penalty = penalty
+        self.delta = delta
         self.metric_fn = getattr(Distances, metric)
 
-    # ------------------------------------------------------------------
-    # Interface pública
-    # ------------------------------------------------------------------
-    def fit(self, passengers: Sequence[Passenger]) -> List[EAVRPGroup]:
-        if not passengers:
-            return []
+    def fit(self, passengers: List[Passenger]) -> List[EAVRPGroup]:
+        """Executa o agrupamento e retorna grupos resultantes."""
+        # inicia clusters como listas singleton
+        clusters: List[List[Passenger]] = [[p] for p in passengers]
 
-        # 1) Matriz de distâncias combinadas -----------------------------
-        n = len(passengers)
-        dmat: List[List[float]] = [[0.0] * n for _ in range(n)]
-        for i in range(n):
-            for j in range(i + 1, n):
-                d = self._pair_distance(passengers[i], passengers[j])
-                dmat[i][j] = dmat[j][i] = d
+        # pré-cálculo de distâncias compostas
+        def pair_dist(p_i: Passenger, p_j: Passenger) -> float:
+            d_o = self.metric_fn(*p_i.origin(), *p_j.origin())
+            d_d = self.metric_fn(*p_i.destination(), *p_j.destination())
+            return self.alpha * d_o + self.beta * d_d
+        
+        # função de diâmetro de cluster
+        def diameter(cluster: List[Passenger]) -> float:
+            maxd = 0.0
+            for i in range(len(cluster)):
+                for j in range(i+1, len(cluster)):
+                    d = pair_dist(cluster[i], cluster[j])
+                    if d > maxd:
+                        maxd = d
+            return maxd
 
-        # 2) Inicializa clusters singleton ------------------------------
-        clusters: List[set[int]] = [{i} for i in range(n)]
+        # função de custo de mesclagem
+        def merge_cost(A: List[Passenger], B: List[Passenger]) -> float:
+            s = len(A) + len(B)
+            # média de distâncias cruzadas
+            total = 0.0
+            for p in A:
+                for q in B:
+                    total += pair_dist(p, q)
+            avg = total / (len(A) * len(B))
+            return (self.max_size - s) * self.penalty + avg
 
-        # 3) Fusões greedy ----------------------------------------------
+        # loop de fusões
         while True:
-            best_cost = math.inf
-            best_pair: Tuple[int, int] | None = None
-
-            for a in range(len(clusters)):
-                for b in range(a + 1, len(clusters)):
-                    new_size = len(clusters[a]) + len(clusters[b])
-                    if new_size > self.max_size:
+            best = None  # (cost, idx_A, idx_B)
+            n = len(clusters)
+            for i in range(n):
+                for j in range(i+1, n):
+                    A, B = clusters[i], clusters[j]
+                    if len(A) + len(B) > self.max_size:
                         continue
-                    inter = _avg_intercluster_distance(clusters[a], clusters[b], dmat)
-                    cost = (self.max_size - new_size) * self.penalty + inter
-                    if cost < best_cost:
-                        best_cost = cost
-                        best_pair = (a, b)
-
-            if best_pair is None:
+                    # verifica restrição de diâmetro
+                    union = A + B
+                    if diameter(union) > self.delta:
+                        continue
+                    c = merge_cost(A, B)
+                    if best is None or c < best[0]:
+                        best = (c, i, j)
+            if best is None:
                 break
+            _, i, j = best
+            # mescla B em A e remove B
+            clusters[i].extend(clusters[j])
+            clusters.pop(j)
 
-            a, b = best_pair
-            clusters[a].update(clusters[b])
-            clusters.pop(b)
-
-        # 4) Materializa objetos EAVRPGroup ------------------------------
-        groups: List[EAVRPGroup] = []
-        for gid, idx_set in enumerate(clusters, start=1):
-            pax = [passengers[i] for i in sorted(idx_set)]
-            groups.append(EAVRPGroup(gid, pax))
-        return groups
-
-    # ------------------------------------------------------------------
-    # Auxiliar (distância composta)
-    # ------------------------------------------------------------------
-    def _pair_distance(self, p_i: Passenger, p_j: Passenger) -> float:
-        d_orig = self.metric_fn(*p_i.origin, *p_j.origin)
-        d_dest = self.metric_fn(*p_i.destination, *p_j.destination)
-        return self.alpha * d_orig + self.beta * d_dest
+        # cria EAVRPGroup para cada cluster
+        return [EAVRPGroup(gid, passenger) for gid, passenger in enumerate(clusters, start=1)]
 
 
-# ---------------------------------------------------------------------------
-# Conveniência de exportação
-# ---------------------------------------------------------------------------
 __all__ = ["GeoGrouper", "EAVRPGroup"]
+
