@@ -1,5 +1,5 @@
 from geografics import Distances
-from typing import List
+from typing import List, Tuple
 
 class Passenger:
     def __init__(self, id, origin, destination):
@@ -50,6 +50,22 @@ class RechargePoint:
         self._id = id
         self._location = location
     
+    @property
+    def id(self):
+        return self._id
+    
+    @property
+    def location(self):
+        return self._location
+    
+class Depot:
+    def __init__(self, 
+                 id: int, 
+                 location: Tuple[float, float]=(0.0, 0.0)
+                ):
+        self._id = id 
+        self._location = location
+
     @property
     def id(self):
         return self._id

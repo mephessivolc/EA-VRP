@@ -37,7 +37,7 @@ import networkx as nx
 
 from geografics import Distances
 from grouping import EAVRPGroup
-from utils import Passenger
+from utils import Passenger, Depot
 
 Coord = Tuple[float, float]
 Station = Union[Coord, object]
@@ -59,11 +59,14 @@ def _extract_xy(obj: Station) -> Coord:
     raise TypeError("Station não possui coordenadas acessíveis")
 
 
-def build_graph(passengers: List[Passenger],
-                      groups: List[EAVRPGroup],
-                      stations: List[Station],
-                      out_png: str | None,
-                      metric: str = "euclidean") -> None:
+def build_graph(
+        passengers: List[Passenger], 
+        groups: List[EAVRPGroup], 
+        stations: List[Station],
+        depot: List[Depot],
+        out_png: str | None,
+        metric: str = "euclidean") -> None:
+    
     """Gera o grafo EA-VRP e salva em *out_png* (PNG)."""
     metric_fn = getattr(Distances, metric)
 
@@ -73,19 +76,23 @@ def build_graph(passengers: List[Passenger],
     for p in passengers:
         o_node = f"O{p.id}"
         d_node = f"D{p.id}"
-        G.add_node(o_node, pos=tuple(p.origin()[:2]), color="lightblue", label=o_node)
-        G.add_node(d_node, pos=tuple(p.destination()[:2]), color="lightgreen", label=d_node)
-        dist = metric_fn(*p.origin(), *p.destination())
+        G.add_node(o_node, pos=tuple(p.origin[:2]), color="lightblue", label=o_node)
+        G.add_node(d_node, pos=tuple(p.destination[:2]), color="lightgreen", label=d_node)
+        dist = metric_fn(*p.origin, *p.destination)
         G.add_edge(o_node, d_node, weight=dist)
 
     # ---------------- Group centroid nodes & edges ----------------
     for g in groups:
         go_node = f"GO{g.id}"
         gd_node = f"GD{g.id}"
-        G.add_node(go_node, pos=tuple(g.origin()[:2]), color="blue", label=go_node)
-        G.add_node(gd_node, pos=tuple(g.destination()[:2]), color="green", label=gd_node)
-        dist = metric_fn(*g.origin(), *g.destination())
+        G.add_node(go_node, pos=tuple(g.origin[:2]), color="blue", label=go_node)
+        G.add_node(gd_node, pos=tuple(g.destination[:2]), color="green", label=gd_node)
+        dist = metric_fn(*g.origin, *g.destination)
         G.add_edge(go_node, gd_node, weight=dist)
+
+    for d in depot:
+        g_node = f"P{d.id}"
+        G.add_node(g_node, pos=d.location, color='yellow', label=g_node)
 
     # ---------------- Charging stations ---------------------------
     for idx, st in enumerate(stations, start=1):
@@ -101,6 +108,16 @@ def build_graph(passengers: List[Passenger],
                 continue            # pula arestas R↔R
             dist = metric_fn(*r_pos, *data["pos"])
             G.add_edge(r_node, n, weight=dist)
+
+    depot_nodes = [n for n in G.nodes if n.startswith("P")]
+    for d_node in depot_nodes:
+        d_pos = G.nodes[d_node]["pos"]
+        for n, data in G.nodes(data=True):
+            if n.startswith("P") or not n.startswith("G"):
+                continue 
+            dist = metric_fn(*d_pos, *data["pos"])
+            G.add_edge(d_node, n, weight=dist)
+
     # ---------------- Drawing -------------------------------------
     pos = nx.get_node_attributes(G, "pos")
     colors = [data["color"] for _, data in G.nodes(data=True)]

@@ -16,14 +16,14 @@ import numpy as np
 
 from geografics import Distances
 from grouping import EAVRPGroup
-from utils import Vehicle
+from utils import Vehicle, Depot
 
 Idx = int
 QUBO = Dict[Tuple[Idx, Idx], float]
 Coord = Tuple[float, float]
 
 
-class EA_VRP_QUBOEncoder:
+class QUBOEncoder:
     """Codifica EA‑VRP + recarga em formato QUBO."""
 
     # ------------------------------------------------------------------
@@ -35,7 +35,7 @@ class EA_VRP_QUBOEncoder:
                  stations: List[object] | None,
                  penalty_lambda: float | None = None,
                  penalty_mu: float | None = None,
-                 depot: Coord | None = None,
+                 depot: List[Depot] | None = None,
                  metric: str = "euclidean") -> None:
         if not vehicles or not groups:
             raise ValueError("vehicles e groups não podem ser vazios")
@@ -43,7 +43,7 @@ class EA_VRP_QUBOEncoder:
         self.groups = groups
         self.stations = stations or []
         self.metric_fn = getattr(Distances, metric)
-        self.depot = depot or (0.0, 0.0)
+        self.depot = depot or [(0.0, 0.0)]
 
         # custos
         self._cost_g = self._compute_group_costs()
@@ -136,6 +136,7 @@ class EA_VRP_QUBOEncoder:
             for g in self.groups:
                 go = g.origin
                 gd = g.destination
+                depot = self.depot[0].location
                 cost = metric(*depot, *go) + g.distance(metric=metric.__name__) + metric(*gd, *depot)
                 row.append(cost)
             costs.append(row)
@@ -144,7 +145,8 @@ class EA_VRP_QUBOEncoder:
     def _compute_station_costs(self):
         if not self.stations:
             return []
-        metric = self.metric_fn; depot = self.depot[0]
+        metric = self.metric_fn
+        depot = self.depot[0].location
         costs: List[List[float]] = []
         for _ in self.vehicles:
             row = []
@@ -192,4 +194,4 @@ class EA_VRP_QUBOEncoder:
         return Q, offset
 
 
-__all__ = ["EA_VRP_QUBOEncoder"]
+__all__ = ["QUBOEncoder"]

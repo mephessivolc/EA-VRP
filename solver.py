@@ -19,14 +19,14 @@ import pennylane as qml
 
 from pennylane import ApproxTimeEvolution
 
-from encoder import EA_VRP_QUBOEncoder
+from encoder import QUBOEncoder
 
 
 class QAOASolver:
     """QAOA solver com utilidades de análise e histograma."""
 
     def __init__(self,
-                 encoder: EA_VRP_QUBOEncoder,
+                 encoder: QUBOEncoder,
                  p: int = 1,
                  shots: int = 1_000,
                  steps: int = 100,
