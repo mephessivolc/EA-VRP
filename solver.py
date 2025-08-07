@@ -12,12 +12,11 @@ Novidades
 from __future__ import annotations
 
 from typing import List
+from collections import namedtuple
 
 import numpy as np
 import matplotlib.pyplot as plt
 import pennylane as qml
-
-from pennylane import ApproxTimeEvolution
 
 from encoder import QUBOEncoder
 
@@ -33,6 +32,7 @@ class QAOASolver:
                  lr: float = 0.1,
                  trotter_steps: int = 1,
                  dev: str = "lightning.qubit",
+                 optimizer: str = "AdamOptimizer",
                  seed: int | None = None) -> None:
         self.encoder = encoder
         self.p = p
@@ -47,9 +47,12 @@ class QAOASolver:
             self.dev = qml.device(dev, wires=self.n_qubits, shots=shots, seed=seed)
         except Exception as e:
             raise ValueError(f"Pennylane não conseguiu instanciar o device '{dev}': {e}")
-
-        # Hamiltoniano de custo
-        self.cost_h, self.offset = self._qubo_to_hamiltonian()
+        
+        # Otimizador
+        try:
+            self.optimizer = getattr(qml, optimizer)
+        except Exception as e:
+            raise ValueError(f"Pennylane não conseguiu instanciar o otimizador '{optimizer}': {e}")
 
         # Parâmetros iniciais QAOA
         rng = np.random.default_rng(seed)
@@ -58,7 +61,7 @@ class QAOASolver:
 
         # Resultados
         self.history: List[float] = []
-        self.samples: np.ndarray | None = None
+        self._samples: np.ndarray | None = None
         self.best_bits: List[int] | None = None
         self.best_cost: float | None = None
 
@@ -83,9 +86,8 @@ class QAOASolver:
     # Camadas do circuito QAOA
     # ---------------------------------------------------------------
     def _apply_cost(self, gamma: float):
-        # qml.apply(qml.evolve(self.cost_h, gamma))
         qml.apply(
-            ApproxTimeEvolution(self.cost_h, gamma, self.trotter_steps)
+            qml.ApproxTimeEvolution(self.cost_h, gamma, self.trotter_steps)
         )
 
     def _apply_mixer(self, beta: float):
@@ -117,6 +119,9 @@ class QAOASolver:
     # Fase de otimização
     # ---------------------------------------------------------------
     def solve(self):
+        # Hamiltoniano de custo
+        self.cost_h, self.offset = self._qubo_to_hamiltonian()
+        
         cost_qnode = qml.QNode(self._expval_circuit, self.dev)
         params = self.params.copy()
         for _ in range(self.steps):
@@ -127,14 +132,38 @@ class QAOASolver:
         sample_qnode = qml.QNode(self._sample_circuit, self.dev)
         raw = np.array(sample_qnode(params)).T  # (shots, n_qubits)
         bits = ((1 - raw) // 2).astype(int)
-        self.samples = bits
+        self._samples = bits
 
         # Avalia custo de cada bitstring
         costs = [self._bit_cost(b) for b in bits]
         best_idx = int(np.argmin(costs))
         self.best_bits = bits[best_idx].tolist()
         self.best_cost = float(costs[best_idx])
-        return self.best_bits, self.best_cost
+
+        # Energia de cada bitstring
+        energies = [self._bit_cost(b) for b in self._samples]
+
+        # Media das Energias
+        avg_energy = float(np.mean(energies))
+
+        # Plausiabilidade de cada bitsting
+        feas = [s for s in self._samples if self.encoder.is_feasible(s)]
+
+        # monta um objeto simples (pode ser um namedtuple, dataclass ou dict)
+        Result = namedtuple("Result", ["best_bits", "best_cost", 
+                                       "samples", "energies",
+                                       "avg_energy",
+                                       "feas", "feas_rate"])
+        return Result(
+            best_bits = self.best_bits,
+            best_cost = self.best_cost,
+            samples   = self._samples,
+            energies  = energies,
+            avg_energy = avg_energy,
+            feas      = feas,
+            feas_rate = len(feas) / len(self._samples)
+        )
+
 
     # ---------------------------------------------------------------
     def _bit_cost(self, bits):
@@ -149,11 +178,11 @@ class QAOASolver:
 
         A barra correspondente ao melhor estado é destacada em vermelho.
         """
-        if self.samples is None:
+        if self._samples is None:
             raise RuntimeError("Execute solve() antes.")
 
         # Converte bitstrings → inteiros
-        xs = [int("".join(map(str, b[::-1])), 2) for b in self.samples]
+        xs = [int("".join(map(str, b[::-1])), 2) for b in self._samples]
         uniq, counts = np.unique(xs, return_counts=True)
 
         # Índices para rótulos igualmente espaçados

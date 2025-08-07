@@ -22,6 +22,15 @@ class Passenger:
     @property
     def destination(self):
         return self._destination
+    
+    @property
+    def str_origin(self):
+        return f"Po{self.id}"
+    
+    @property
+    def str_destination(self):
+        return f"Pd{self.id}"
+    
 
 class Group:
     def __init__(self, gid: int, passengers: List[Passenger]):
@@ -45,6 +54,15 @@ class Group:
     def destination(self):
         return self._destination
     
+    @property
+    def str_origin(self):
+        return f"Go{self.id}"
+    
+    @property
+    def str_destination(self):
+        return f"Gd{self.id}"
+    
+    
 class RechargePoint:
     def __init__(self, id, location):
         self._id = id
@@ -57,6 +75,10 @@ class RechargePoint:
     @property
     def location(self):
         return self._location
+    
+    @property
+    def str_location(self):
+        return f"R{self.id}"
     
 class Depot:
     def __init__(self, 
@@ -73,17 +95,43 @@ class Depot:
     @property
     def location(self):
         return self._location
+    
+    @property
+    def str_location(self):
+        return f"D{self.id}"
+
+    
 
 class Vehicle:
-    def __init__(self, id, start_location=(0, 0), battery=100.0, consumption_per_km=0.4, min_charge=20.0):
-        self.id = id
-        self.start_location = start_location
-        self.battery = battery  # carga atual em %
-        self.consumption_per_km = consumption_per_km  # porcentagem por km
-        self.min_charge = min_charge  # nível mínimo antes de recarregar
+    def __init__(self, id, start_location=(0, 0), battery=100.0, consumption_per_km=0.3, min_charge=20.0):
+        self._id = id
+        self._start_location = start_location
+        self._battery = battery  # carga atual em %
+        self._consumption_per_km = consumption_per_km  # porcentagem por km
+        self._min_charge = min_charge  # nível mínimo antes de recarregar
 
-    def distance_to(self, point, dist_func=Distances.euclidean):
-        return dist_func(self.start_location[0], self.start_location[1], point[0], point[1])
+    @property
+    def id(self):
+        return self._id 
+    
+    @property
+    def start_location(self):
+        return self._start_location
+    
+    @property
+    def battery(self):
+        return self._battery
+    
+    @property
+    def consumption_per_km(self):
+        return self._consumption_per_km
+    
+    @property
+    def min_charge(self):
+        return self._min_charge
+
+    def distance_to(self, point: Tuple[float, float]=(0.0,0.0), dist_func=Distances.euclidean):
+        return dist_func(*self._start_location, *point)
 
     def energy_needed(self, distance):
         return distance * self.consumption_per_km
