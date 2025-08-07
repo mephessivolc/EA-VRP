@@ -1,0 +1,15 @@
+services:
+  python:
+    # usa o Dockerfile.override em vez do original
+    build:
+      context: .
+      dockerfile: Dockerfile.override        # <── aqui o override
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all           # expõe todas as placas
+    deploy:                                   # reserva GPU (Compose v3.8+ / Swarm)
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all                     # ou "1" para só uma GPU
+              capabilities: [gpu]
